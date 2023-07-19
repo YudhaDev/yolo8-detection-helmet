@@ -1,0 +1,5 @@
+train: E:\Projects\python-projects\yolo8-object-detection\dataset\train\images
+val: E:\Projects\python-projects\yolo8-object-detection\dataset\valid\images
+
+nc: 1
+names: ['helmet']

@@ -15,6 +15,7 @@ import requests
 import os
 from flask import Flask, jsonify, send_from_directory, render_template, url_for
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
 from base64 import b64encode
 from PIL import Image as PillowImage
@@ -33,15 +34,15 @@ app.app_context().push()
 # db.create_all()
 
 # Percobaan save
-img_path = './4.jpg'
-img_load = PillowImage.open(img_path)
-path = 'test_dir'
-new_path = os.path.join(path, img_path)
-os.makedirs(path, exist_ok=True)
-output_path = os.path.join(path, "asdawdadd.jpg")
-img_cv = cv2.imread(img_path)
-img_pil_from_cv = PillowImage.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB))
-img_pil_from_cv.save(output_path)
+# img_path = './4.jpg'
+# img_load = PillowImage.open(img_path)
+# path = 'test_dir'
+# new_path = os.path.join(path, img_path)
+# os.makedirs(path, exist_ok=True)
+# output_path = os.path.join(path, "asdawdadd.jpg")
+# img_cv = cv2.imread(img_path)
+# img_pil_from_cv = PillowImage.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB))
+# img_pil_from_cv.save(output_path)
 
 # Nampung RFID
 queue_rfid = Queue()
@@ -74,7 +75,7 @@ global_gambar_deteksi = ""
 class RFIDHelmetDetectionModelTable(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     rfid_number = db.Column(db.String(200), nullable=True) # kolom untuk nomor rfid
-    img_path = db.Column(db.String(200), nullable=True) # kolom untuk path foto
+    img_name = db.Column(db.String(200), nullable=True) # kolom untuk path foto
     date_created = db.Column(db.DateTime, default=datetime.utcnow()) # kolom
     date_updated = db.Column(db.DateTime, nullable=True)
 
@@ -133,8 +134,8 @@ def getAll():
     for rfid in getall_task:
         result.append({
             'id': rfid.id,
-            'rfid_number': rfid.content,
-            'img_path': str(rfid.photo),
+            'rfid_number': rfid.rfid_number,
+            'img_name': str(rfid.img_name),
             'date_created': rfid.date_created,
             'date_updated' : rfid.date_updated
         })
@@ -180,11 +181,11 @@ def storeImage():
     # Cara kedua, menyimpan fotonya kedalam project dan mendata pathnya-
     # kedalam database
     try:
-        store_image_task = RFIDHelmetDetectionModelTable(rfid_number=global_rfid_number, img_path=output_path_final)
+        store_image_task = RFIDHelmetDetectionModelTable(rfid_number=global_rfid_number, img_name=img_name)
         db.session.add(store_image_task)
         db.session.commit()
-    except:
-        print("Terjadi kesalahan menyimpan data ke database.")
+    except SQLAlchemyError as err:
+        print("Terjadi kesalahan menyimpan data ke database." +str(err))
     return "suskses simpan foto"
 
 

@@ -1,6 +1,7 @@
 ultralytics==8.0.32
 supervision==0.2.1
 pyserial
-flask
-flask_sqlalchemy
+flask==2.2.2
+flask-cors
+flask_sqlalchemy==3.0.2
 SQLAlchemy

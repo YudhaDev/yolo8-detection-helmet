@@ -15,6 +15,7 @@ import requests
 import os
 from flask import Flask, jsonify, send_from_directory, render_template, url_for
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
 from base64 import b64encode
@@ -22,6 +23,7 @@ from PIL import Image as PillowImage
 from queue import Queue
 
 app = Flask(__name__)
+CORS(app)
 # backend.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:@localhost/database_sensor2'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rfid.db'
 # backend.config['SECRET_KEY'] = "hehehe"
@@ -380,7 +382,13 @@ def rfid():
     serialInst.close()
     serialInst.open()
 
-    while True:
+    # serial LED test
+    serialInst.write(b'R')
+    serialInst.write(b'G')
+    serialInst.write(b'Y')
+
+    toggle = False
+    while toggle:
         rfid_number = ""
         if serialInst.in_waiting:
             rfid_number = str(serialInst.readline().decode('utf').rstrip('\n'))
@@ -482,9 +490,10 @@ if __name__ == '__main__':
     t3 = threading.Thread(target=rfid)  # Untuk menerima masukan rfidnya
     # t4 = threading.Thread(target=renderText)
 
-    t1.start()
-    time.sleep(2)
+    # t1.start()
+    # time.sleep(2)
     t3.start()
 
     # t4.start()
     # main()
+

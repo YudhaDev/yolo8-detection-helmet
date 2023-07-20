@@ -13,7 +13,7 @@ import serial.tools.list_ports
 import serial
 import requests
 import os
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory, render_template, url_for
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from base64 import b64encode
@@ -51,30 +51,35 @@ global_rfid_number = ""
 # Nampung gambar deteksi
 global_gambar_deteksi = ""
 
-class RFIDModelTable(db.Model):
+
+# class RFIDModelTable(db.Model):
+#     id = db.Column(db.Integer, primary_key=True)
+#     content = db.Column(db.String(200), nullable=False)
+#     date_created = db.Column(db.DateTime, default=datetime.utcnow())
+#
+#     def __repr__(self):
+#         return '<Task %r>' % self.id
+#
+#
+# class RFIDModelTable2(db.Model):
+#     id = db.Column(db.Integer, primary_key=True, )
+#     content = db.Column(db.String(200), nullable=True)
+#     photo = db.Column(db.LargeBinary(200), nullable=False)
+#     date_created = db.Column(db.DateTime, default=datetime.utcnow())
+#
+#     def __repr__(self):
+#         return '<Task %r>' % self.id
+
+
+class RFIDHelmetDetectionModelTable(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    content = db.Column(db.String(200), nullable=False)
-    date_created = db.Column(db.DateTime, default=datetime.utcnow())
+    rfid_number = db.Column(db.String(200), nullable=True) # kolom untuk nomor rfid
+    img_path = db.Column(db.String(200), nullable=True) # kolom untuk path foto
+    date_created = db.Column(db.DateTime, default=datetime.utcnow()) # kolom
+    date_updated = db.Column(db.DateTime, nullable=True)
 
-    def __repr__(self):
-        return '<Task %r>' % self.id
 
-
-class RFIDModelTable2(db.Model):
-    id = db.Column(db.Integer, primary_key=True, )
-    content = db.Column(db.String(200), nullable=True)
-    photo = db.Column(db.LargeBinary(200), nullable=False)
-    date_created = db.Column(db.DateTime, default=datetime.utcnow())
-
-    def __repr__(self):
-        return '<Task %r>' % self.id
-
-class RFIDModeTable3(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    content = db.Column(db.String(200), nullable=True)
-    img_path =
-
-db.drop_all()
+# db.drop_all()
 db.create_all()
 
 
@@ -84,67 +89,112 @@ def runBackend():
     # t3.start()
 
 
+@app.route('/static/<filename>')
+def open_image(filename):
+    return send_from_directory('static/images', filename)
+
+
+@app.route('/file_list')
+def list_files():
+    static_folder = os.path.join(app.root_path, 'static')
+    files = os.listdir(static_folder)
+    file_urls = [url_for('static', filename=file) for file in files]
+    return render_template('file_list.html', file_urls=file_urls, files=files)
+
+
+@app.route('/static/images')
+def list_files_images():
+    static_folder = os.path.join(app.root_path, 'static')
+    images_folder = os.path.join(static_folder, 'images')
+    files = os.listdir(images_folder)
+    file_urls = [url_for('static', filename=file) for file in files]
+    print(str(file_urls))
+    return render_template('image_list.html', file_urls=file_urls, files=files)
+
+
 @app.route('/')
 def hello():
     return "hallo"
 
 
-@app.route('/insert')
-def insert():
-    insert_task = RFIDModelTable2(content="sebuah konten hoshi")
-    db.session.add(insert_task)
-    db.session.commit()
-    return "bisa"
+# @app.route('/insert')
+# def insert():
+#     insert_task = RFIDModelTable2(content="sebuah konten hoshi")
+#     db.session.add(insert_task)
+#     db.session.commit()
+#     return "bisa"
+
 
 @app.route('/get-all')
 def getAll():
-    getall_task = RFIDModelTable2().query.order_by(RFIDModelTable2.id).all()
+    getall_task = RFIDHelmetDetectionModelTable().query.order_by(RFIDHelmetDetectionModelTable.id).all()
     result = []
 
     for rfid in getall_task:
         result.append({
             'id': rfid.id,
-            'content': rfid.content,
-            'photo': str(rfid.photo),
-            'date_created': rfid.date_created
+            'rfid_number': rfid.content,
+            'img_path': str(rfid.photo),
+            'date_created': rfid.date_created,
+            'date_updated' : rfid.date_updated
         })
     return jsonify(result)
 
 
 @app.route('/store-image', methods=['POST'])
 def storeImage():
-    img_name = str(random.randint(1,10))+".jpg"
-    save_dir = "saved_image"
-    output_path = os.path.join(save_dir, img_name)
-    os.makedirs(save_dir, exist_ok=True)
-    img_to_save = global_gambar_deteksi
-    img_pil = PillowImage.fromarray(cv2.cvtColor(img_to_save, cv2.COLOR_BGR2RGB))
-    img_pil.save(output_path)
+    global global_gambar_deteksi
+    global global_rfid_number
 
-    img_loaded = PillowImage.open(img_path)
-    img_encoded = b64encode(img_loaded.tobytes())
-    store_image_task = RFIDModelTable2(content="test", photo=img_encoded)
-    db.session.add(store_image_task)
-    db.session.commit()
+    # ini inisialisasi path untuk menyimpan fotonya
+    img_name = str(random.randint(1, 1000000000)) + ".jpg"
+    save_dir1 = "static"
+    save_dir2 = "images"
+    # output_path1 = os.path.join(app.root_path, save_dir1)
+    output_path2 = os.path.join(save_dir1, save_dir2)
+    output_path_final = os.path.join(output_path2, img_name)
+    os.makedirs(save_dir2, exist_ok=True) # membuat sebuah direktori di project.
+    img_to_save = global_gambar_deteksi
+
+    #Debuging
+    # cv2.imshow("test aja", img_to_save)
+    # cv2.waitKey(0)
+
+    # menyimpan ke directory project
+    try:
+        rgb_array = cv2.cvtColor(img_to_save, cv2.COLOR_BGR2RGB)
+        img_pil = PillowImage.fromarray(rgb_array)
+        img_pil.save(output_path_final)
+    except:
+        print("Terjadi kesalahan menyimpan file ke project.")
+
+    # Ini cara tidak recommeded karena menyimpan gambarnya langsung ke DB
+    # Cara ini akan mengakibatkan size DB membengkak sampai bergiga2
+    # Karena file DBnya besar, akan mengakibatkan programnya nge-freeze
+    ## img_loaded = PillowImage.open(img_path)
+    ## img_encoded = b64encode(img_loaded.tobytes())
+    ## store_image_task = RFIDModelTable2(content="test", photo=img_encoded)
+    ## db.session.add(store_image_task)
+    ## db.session.commit()
+
+    # Cara kedua, menyimpan fotonya kedalam project dan mendata pathnya-
+    # kedalam database
+    try:
+        store_image_task = RFIDHelmetDetectionModelTable(rfid_number=global_rfid_number, img_path=output_path_final)
+        db.session.add(store_image_task)
+        db.session.commit()
+    except:
+        print("Terjadi kesalahan menyimpan data ke database.")
     return "suskses simpan foto"
 
 
 @app.route('/open-image')
 def openImage():
-    task_get_photo = RFIDModelTable2.query.first()
-    # result = []
-    # for rfid in task_get_photo:
-    #     result.append({
-    #         'id' : rfid.id,
-    #         'content' : rfid.content,
-    #         "photo" : rfid.photo,
-    #         "date_created" : rfid.date_created
-    #     })
-    img_decode = base64.b64decode(task_get_photo.photo)
-    return str(img_decode)
-    # cv2.imshow("Foto", img_decode)
-    # cv2.waitKey(0)
-    # return "sukses"
+    return "Anda nyasar?."
+    # task_get_photo = RFIDModelTable2.query.first()
+    # img_decode = base64.b64decode(task_get_photo.photo)
+    # return str(img_decode)
+
 
 
 def main():
@@ -187,6 +237,8 @@ def init_detection_image():
 
 
 def init_detection_camera():
+    global global_gambar_deteksi
+
     cap = cv2.VideoCapture(0)
 
     ##### set resolusi kamera
@@ -207,13 +259,21 @@ def init_detection_camera():
     while True:
         success, img = cap.read()
 
-        result = model(img, conf=0.8)[0]
-        print()
+        result = model(img, conf=0.2)[0]
+        print("Tipenya: " + str(type(img)))
         detection = sv.Detections.from_yolov8(result)
+        label = [
+            f"{model.model.names[class_id]} {confidence: 0.2f}"
+            for _, confidence, class_id, _ in detection
+        ]
+        img = box_annotator.annotate(scene=img, detections=detection, skip_label=False, labels=label)
+        cv2.imshow("Kamera", img)
+
         if not result.__len__() == 0:
-            print("Masuk pak eko.")
-            # Tulis disini
-            # Show Message
+            # Simpan gambarnya ke lokal variable dulu
+            global_gambar_deteksi = img
+
+            # Tulis pesan selamat datang
             # Create a black image as the popup background
             popup_image = np.zeros((200, 400, 3), dtype=np.uint8)
 
@@ -246,11 +306,15 @@ def init_detection_camera():
             cv2.namedWindow("Popup", cv2.WINDOW_NORMAL)
             cv2.imshow("Popup", popup_image)
 
+            time.sleep(3)
+
+            # Debuging
+            print("Masuk pak eko." + str(type(img)))
             print(detection.class_id)
 
-            # save ke database dgn mengakses API
+            # save ke database dgn mengakses API Flask
             base_url = "http://127.0.0.1:5000/"
-            response = requests.post(base_url+"store-image")
+            response = requests.post(base_url + "store-image")
             if response.status_code == 200:
                 print("suskses akses store image API")
                 break
@@ -258,13 +322,6 @@ def init_detection_camera():
                 print("gagal akses store image API")
                 break
 
-
-        label = [
-            f"{model.model.names[class_id]} {confidence: 0.2f}"
-            for _, confidence, class_id, _ in detection
-        ]
-        img = box_annotator.annotate(scene=img, detections=detection, skip_label=False, labels=label)
-        cv2.imshow("Kamera", img)
         if cv2.waitKey(1) and 0xFF == ord('q'):
             break
 
@@ -298,6 +355,8 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def rfid():
+    global global_rfid_number
+
     ports = serial.tools.list_ports.comports()
     portList = []
     serialInst = serial.Serial()
@@ -328,7 +387,7 @@ def rfid():
         print(str(rfid_number))
         if len(rfid_number) > 3:
             print("rfid terdeteksi.")
-            queue_rfid.put(rfid_number)
+            global_rfid_number = rfid_number
             break
         else:
             print("rfid tidak terdeteksi")
@@ -337,6 +396,7 @@ def rfid():
 
     print("Mempersiapkan untuk mendeteksi helm.")
     t2.start()
+
 
 def renderText():
     # Create a black image as the popup background
@@ -370,6 +430,8 @@ def renderText():
     cv2.imshow("Popup", popup_image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
+
+
 def renderText2():
     # Create a black image as the popup background
     popup_image = 255 * np.ones((200, 400, 3), dtype=np.uint8)
@@ -412,14 +474,16 @@ def renderText2():
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
+
 if __name__ == '__main__':
-    t1 = threading.Thread(target=runBackend) # Untuk servernya
-    t2 = threading.Thread(target=main) # Untuk mendeteksi helmnya
+    t1 = threading.Thread(target=runBackend)  # Untuk servernya
+    t2 = threading.Thread(target=main)  # Untuk mendeteksi helmnya
     t3 = threading.Thread(target=rfid)  # Untuk menerima masukan rfidnya
     # t4 = threading.Thread(target=renderText)
+
     t1.start()
-    # t2.start()
     time.sleep(2)
     t3.start()
+
     # t4.start()
     # main()

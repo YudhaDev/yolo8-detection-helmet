@@ -1,2 +1,6 @@
 ultralytics==8.0.32
 supervision==0.2.1
+pyserial
+flask
+flask_sqlalchemy
+SQLAlchemy

@@ -5,3 +5,5 @@ flask==2.2.2
 flask-cors
 flask_sqlalchemy==3.0.2
 SQLAlchemy
+asyncio
+websockets

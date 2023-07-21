@@ -1,7 +1,11 @@
+# untuk komunikasi dengan vuejs
+import asyncio
+import websockets
+###############################
+
 import base64
 import random
 import time
-
 import cv2
 import numpy as np
 import textwrap
@@ -13,11 +17,15 @@ import serial.tools.list_ports
 import serial
 import requests
 import os
+
+# Untuk server lokalnya
 from flask import Flask, jsonify, send_from_directory, render_template, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
+###############################
+
 from base64 import b64encode
 from PIL import Image as PillowImage
 from queue import Queue
@@ -54,6 +62,9 @@ global_rfid_number = ""
 # Nampung gambar deteksi
 global_gambar_deteksi = ""
 
+# Nampung Object Serial
+global_serial_init = ""
+
 
 # class RFIDModelTable(db.Model):
 #     id = db.Column(db.Integer, primary_key=True)
@@ -76,9 +87,9 @@ global_gambar_deteksi = ""
 
 class RFIDHelmetDetectionModelTable(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    rfid_number = db.Column(db.String(200), nullable=True) # kolom untuk nomor rfid
-    img_name = db.Column(db.String(200), nullable=True) # kolom untuk path foto
-    date_created = db.Column(db.DateTime, default=datetime.utcnow()) # kolom
+    rfid_number = db.Column(db.String(200), nullable=True)  # kolom untuk nomor rfid
+    img_name = db.Column(db.String(200), nullable=True)  # kolom untuk path foto
+    date_created = db.Column(db.DateTime, default=datetime.utcnow())  # kolom
     date_updated = db.Column(db.DateTime, nullable=True)
 
 
@@ -90,7 +101,6 @@ def runBackend():
     app.run(debug=True, use_reloader=False, port=5000,
             host='0.0.0.0')  # use reloader bernilai false agar Flask bisa jalan di secondary thread.
     # t3.start()
-
 
 @app.route('/static/<filename>')
 def open_image(filename):
@@ -137,9 +147,9 @@ def getAll():
         result.append({
             'id': rfid.id,
             'rfid_number': rfid.rfid_number,
-            'img_name': str(rfid.img_name),
+            'img_name': 'http://localhost:5000/static/' + str(rfid.img_name),
             'date_created': rfid.date_created,
-            'date_updated' : rfid.date_updated
+            'date_updated': rfid.date_updated
         })
     return jsonify(result)
 
@@ -156,10 +166,10 @@ def storeImage():
     # output_path1 = os.path.join(app.root_path, save_dir1)
     output_path2 = os.path.join(save_dir1, save_dir2)
     output_path_final = os.path.join(output_path2, img_name)
-    os.makedirs(save_dir2, exist_ok=True) # membuat sebuah direktori di project.
+    os.makedirs(save_dir2, exist_ok=True)  # membuat sebuah direktori di project.
     img_to_save = global_gambar_deteksi
 
-    #Debuging
+    # Debuging
     # cv2.imshow("test aja", img_to_save)
     # cv2.waitKey(0)
 
@@ -187,7 +197,7 @@ def storeImage():
         db.session.add(store_image_task)
         db.session.commit()
     except SQLAlchemyError as err:
-        print("Terjadi kesalahan menyimpan data ke database." +str(err))
+        print("Terjadi kesalahan menyimpan data ke database." + str(err))
     return "suskses simpan foto"
 
 
@@ -197,7 +207,6 @@ def openImage():
     # task_get_photo = RFIDModelTable2.query.first()
     # img_decode = base64.b64decode(task_get_photo.photo)
     # return str(img_decode)
-
 
 
 def main():
@@ -241,8 +250,18 @@ def init_detection_image():
 
 def init_detection_camera():
     global global_gambar_deteksi
+    global global_serial_init
 
-    cap = cv2.VideoCapture(0)
+    for index_camera in range(11):
+        try:
+            cap = cv2.VideoCapture(index_camera)
+            if not cap.isOpened():
+                raise Exception(f"Kamera{index_camera} tidak ditemukan, mencoba ke kamera selanjutnya.")
+            break
+        except:
+            print(f"Tidak ada kamera yang terdeteksi.")
+            break
+        time.sleep(1)
 
     ##### set resolusi kamera
     args = parse_arguments()
@@ -274,7 +293,12 @@ def init_detection_camera():
 
         if not result.__len__() == 0:
             # Simpan gambarnya ke lokal variable dulu
+            print("Helm terdeteksi, menyimpan kedalam database..")
+            time.sleep(2)
             global_gambar_deteksi = img
+
+            # Nyalahkan LED hijau
+            global_serial_init.write(b'5')
 
             # Tulis pesan selamat datang
             # Create a black image as the popup background
@@ -320,6 +344,7 @@ def init_detection_camera():
             response = requests.post(base_url + "store-image")
             if response.status_code == 200:
                 print("suskses akses store image API")
+                t3.join()
                 break
             else:
                 print("gagal akses store image API")
@@ -359,10 +384,10 @@ def parse_arguments() -> argparse.Namespace:
 
 def rfid():
     global global_rfid_number
-
+    global global_serial_init
     ports = serial.tools.list_ports.comports()
     portList = []
-    serialInst = serial.Serial()
+    global_serial_init = serial.Serial()
     print("Port yang sedang terhubung sekarang: ")
     index_port = 0
     for port in ports:
@@ -370,28 +395,50 @@ def rfid():
         print("(" + str(index_port) + "). " + str(port))
         index_port += 1
 
-    # print(str(portList))
-    inputan_user = input("Pilih Port yang ingin disambungkan: COM")
-    for i in range(0, len(portList)):
-        if str(portList[i]).startswith("COM" + str(inputan_user)):
-            port_pilihan = "COM" + inputan_user
+    # Cara 1 inputan manual.
+    # inputan_user = input("Pilih Port yang ingin disambungkan: COM")
+    # for i in range(0, len(portList)):
+    #     if str(portList[i]).startswith("COM" + str(inputan_user)):
+    #         port_pilihan = "COM" + inputan_user
+    #
+    # serialInst.baudrate = 9600
+    # serialInst.port = port_pilihan
+    # serialInst.close()
+    # serialInst.open()
+    #################################################################
+    # Cara 2 inputan brute
+    brute_choose = 1
+    while True:
+        try:
+            port_pilihan = ""
+            for i in range(0, len(portList)):
+                if str(portList[i]).startswith("COM" + str(brute_choose)):
+                    port_pilihan = "COM" + str(brute_choose)
 
-    print(port_pilihan)
-    serialInst.baudrate = 9600
-    serialInst.port = port_pilihan
-    serialInst.close()
-    serialInst.open()
+            global_serial_init.baudrate = 9600
+            global_serial_init.port = port_pilihan
+            global_serial_init.close()
+            global_serial_init.open()
+            print(f"COM{brute_choose} bisa dikoneksikan..")
+            time.sleep(1)
+            print(f"Memulai scan RFID...")
+            time.sleep(2)
+            break
+        except serial.SerialException as err:
+            print(f"COM{brute_choose} tidak bisa dikoneksikan {str(err)}. mencoba port selanjutnya")
+            time.sleep(1)
+            brute_choose += 1
 
     # serial LED test
-    serialInst.write(b'R')
-    serialInst.write(b'G')
-    serialInst.write(b'Y')
+    # serialInst.write(b'1')
+    global_serial_init.write(b'3')
+    # serialInst.write(b'5')
 
-    toggle = False
+    toggle = True
     while toggle:
         rfid_number = ""
-        if serialInst.in_waiting:
-            rfid_number = str(serialInst.readline().decode('utf').rstrip('\n'))
+        if global_serial_init.in_waiting:
+            rfid_number = str(global_serial_init.readline().decode('utf').rstrip('\n'))
             # queue_rfid.put(rfid_number)
         print(str(rfid_number))
         if len(rfid_number) > 3:
@@ -484,16 +531,20 @@ def renderText2():
     cv2.destroyAllWindows()
 
 
+def echoSesuatu():
+    while True:
+        print("Halo dari console")
+
+
 if __name__ == '__main__':
+    # print("Halo ini dari main.py")
     t1 = threading.Thread(target=runBackend)  # Untuk servernya
     t2 = threading.Thread(target=main)  # Untuk mendeteksi helmnya
-    t3 = threading.Thread(target=rfid)  # Untuk menerima masukan rfidnya
-    # t4 = threading.Thread(target=renderText)
+    t3 = threading.Thread(target=rfid)  # Untuk menerima masukan rfidnya (t3 juga memanggil t2 di dalam bagan kodenya)
 
-    # t1.start()
-    # time.sleep(2)
+    t1.start()
+    time.sleep(2)
     t3.start()
 
-    # t4.start()
-    # main()
-
+else:
+    print("Ini bukan main.")

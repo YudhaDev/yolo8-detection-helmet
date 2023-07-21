@@ -1,0 +1,18 @@
+# environment.yml
+name: yolo8-detection
+channels:
+  - conda-forge
+dependencies:
+  - python=3.7.2
+  - sqlite
+
+pip:
+  - flask==2.2.2
+  - flask-cors==3.0.10
+  - ultralytics==8.0.32
+  - supervision==0.2.1
+  - flask_sqlalchemy==3.0.2
+  - SQLAlchemy==2.0.19
+  - asyncio==3.4.3
+  - websockets==11.0.3
+  - pyserial==3.5

@@ -26,10 +26,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime
 ###############################
 
-from base64 import b64encode
 from PIL import Image as PillowImage
 from queue import Queue
 
+# Init back-end servernya
 app = Flask(__name__)
 CORS(app)
 # backend.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:@localhost/database_sensor2'
@@ -64,6 +64,9 @@ global_gambar_deteksi = ""
 
 # Nampung Object Serial
 global_serial_init = ""
+
+# kondisi timer scan
+global_timer = True
 
 
 # class RFIDModelTable(db.Model):
@@ -101,6 +104,7 @@ def runBackend():
     app.run(debug=True, use_reloader=False, port=5000,
             host='0.0.0.0')  # use reloader bernilai false agar Flask bisa jalan di secondary thread.
     # t3.start()
+
 
 @app.route('/static/<filename>')
 def open_image(filename):
@@ -248,9 +252,26 @@ def init_detection_image():
     cv2.waitKey(0)
 
 
+def timer_scan():
+    global global_timer
+
+    global_timer = True
+    nilai_timer = 0
+    while global_timer:
+        nilai_timer += 1
+        print(f"Waktu timer: {str(nilai_timer)}")
+        if nilai_timer == 20:
+            print("Waktu sudah habis.")
+            global_timer = False
+        time.sleep(1)
+
+
 def init_detection_camera():
     global global_gambar_deteksi
     global global_serial_init
+    global global_timer
+
+    global_timer = True
 
     for index_camera in range(11):
         try:
@@ -279,8 +300,8 @@ def init_detection_camera():
     )
 
     while True:
+        # Init camera dan deteksi Yolo helmnya
         success, img = cap.read()
-
         result = model(img, conf=0.2)[0]
         print("Tipenya: " + str(type(img)))
         detection = sv.Detections.from_yolov8(result)
@@ -291,7 +312,25 @@ def init_detection_camera():
         img = box_annotator.annotate(scene=img, detections=detection, skip_label=False, labels=label)
         cv2.imshow("Kamera", img)
 
+        # Check jika thread timernya uda jalan atau belom
+        if global_timer:
+            print("Masih waktu scan.")
+            if t4.isAlive():
+                print("timer sudah berjalan.")
+            else:
+                print("timer belum berjalan, menjalakan timer sekarang..")
+                t4.start()
+        else:
+            global_serial_init.write(b'1') # LED
+            global_serial_init.write(b'4') # LED
+            t4.join() # Stop timernya
+            break
+
+        # check jika terdeteksi Helm atau nggk
         if not result.__len__() == 0:
+            #Stop timer scannya
+            global_timer = False
+
             # Simpan gambarnya ke lokal variable dulu
             print("Helm terdeteksi, menyimpan kedalam database..")
             time.sleep(2)
@@ -299,6 +338,7 @@ def init_detection_camera():
 
             # Nyalahkan LED hijau
             global_serial_init.write(b'5')
+            global_serial_init.write(b'4')
 
             # Tulis pesan selamat datang
             # Create a black image as the popup background
@@ -350,6 +390,7 @@ def init_detection_camera():
                 print("gagal akses store image API")
                 break
 
+        # Membiarkan jendela opencv tetap terbuka
         if cv2.waitKey(1) and 0xFF == ord('q'):
             break
 
@@ -368,7 +409,6 @@ def init_detection_camera_substraction():
 
         if cv2.waitKey(1) and 0xFF == ord('q'):
             break
-
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="set resolusi kamera")
@@ -406,9 +446,10 @@ def rfid():
     # serialInst.close()
     # serialInst.open()
     #################################################################
+
     # Cara 2 inputan brute
     brute_choose = 1
-    while True:
+    for i in range(10):
         try:
             port_pilihan = ""
             for i in range(0, len(portList)):
@@ -541,7 +582,7 @@ if __name__ == '__main__':
     t1 = threading.Thread(target=runBackend)  # Untuk servernya
     t2 = threading.Thread(target=main)  # Untuk mendeteksi helmnya
     t3 = threading.Thread(target=rfid)  # Untuk menerima masukan rfidnya (t3 juga memanggil t2 di dalam bagan kodenya)
-
+    t4 = threading.Thread(target=timer_scan) # Untuk timer scan helmnya (dipanggil didalam t2)
     t1.start()
     time.sleep(2)
     t3.start()

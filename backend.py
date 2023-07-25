@@ -1,4 +1,6 @@
 import os
+import time
+
 import cv2
 import random
 import state_store
@@ -44,14 +46,25 @@ db.create_all()
 
 
 def runBackend():
-    app.run(debug=True, use_reloader=False, port=5000,
+    app_backend = app.run(debug=True, use_reloader=False, port=5000,
             host='0.0.0.0')  # use reloader bernilai false agar Flask bisa jalan di secondary thread.
+    # socketio = SocketIO(app_backend, sync_mode="eventlet")
+    socketio.run(app)
+    # socketio.run(app_backend)
     # t3.start()
 
-def send_frame(frame):
-    _, buffer = cv2.imencode('.jpg', frame)
-    jpg_as_text = base64.b64encode(buffer).decode('utf-8')
-    socketio.emit('frame', jpg_as_text)
+def send_frame():
+    # cap = cv2.VideoCapture(0)
+    while True:
+        # success, img = cap.read()
+        # state_store.global_gambar_per_frame = img
+
+        _, buffer = cv2.imencode('.jpg', state_store.global_gambar_per_frame)
+        jpg_as_text = base64.b64encode(buffer).decode('utf-8')
+        socketio.emit('frame', jpg_as_text)
+        time.sleep(0.5)
+
+
 
 
 @app.route('/static/<filename>')

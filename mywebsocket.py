@@ -76,5 +76,7 @@ def start_websocket_services():
 # Start threadnya
 thread_backend_server = threading.Thread(target=runBackend)
 thread_websocket_server = threading.Thread(target=start_websocket_services)
+thread_streaming_video = threading.Thread(target=send_frame)
 thread_backend_server.start()
 thread_websocket_server.start()
+thread_streaming_video.start()

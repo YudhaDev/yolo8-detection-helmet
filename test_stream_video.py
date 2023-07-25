@@ -1,3 +1,5 @@
+import threading
+
 import cv2
 import base64
 from flask import Flask, render_template
@@ -24,5 +26,7 @@ def video_stream():
             send_frame(frame)
 
 if __name__ == '__main__':
-    socketio.start_background_task(video_stream)
+    thread_video_capture = threading.Thread(target=video_stream)
+    thread_video_capture.start()
+    # socketio.start_background_task(video_stream)
     socketio.run(app)

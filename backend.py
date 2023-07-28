@@ -1,13 +1,12 @@
 import os
 import time
-
+import logging
 import cv2
 import random
 import state_store
 import base64
 from PIL import Image as PillowImage
 from flask_socketio import SocketIO, emit
-
 
 # Untuk server lokalnya
 from flask import Flask, jsonify, send_from_directory, render_template, url_for
@@ -29,6 +28,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rfid.db'
 # backend.config['SECRET_KEY'] = "hehehe"
 db = SQLAlchemy(app)
 app.app_context().push()
+
+
 # socketio.run(app)
 
 
@@ -47,11 +48,16 @@ db.create_all()
 
 def runBackend():
     app_backend = app.run(debug=True, use_reloader=False, port=5000,
-            host='0.0.0.0')  # use reloader bernilai false agar Flask bisa jalan di secondary thread.
+                          host='0.0.0.0')  # use reloader bernilai false agar Flask bisa jalan di secondary thread.
     # socketio = SocketIO(app_backend, sync_mode="eventlet")
-    socketio.run(app)
-    # socketio.run(app_backend)
-    # t3.start()
+
+    # Menjalankan backend beserta socketio
+    socketio.run(app, log_output=False)
+
+    # mendisable logging socketio di terminal
+    logging.getLogger('flask-socketio').setLevel(logging.ERROR)
+    logging.getLogger('engineio').setLevel(logging.ERROR)
+
 
 def send_frame():
     # cap = cv2.VideoCapture(0)
@@ -63,8 +69,6 @@ def send_frame():
         jpg_as_text = base64.b64encode(buffer).decode('utf-8')
         socketio.emit('frame', jpg_as_text)
         time.sleep(0.5)
-
-
 
 
 @app.route('/static/<filename>')

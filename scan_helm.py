@@ -46,7 +46,7 @@ class ScanHelm:
         while True:
             # Init camera dan deteksi Yolo helmnya
             success, img = cap.read()
-            result = model(img, conf=0.2)[0]
+            result = model(img, conf=0.85)[0] # ubah nilai conf= untuk meningkatkan akurasi mendeteksi helm, rekomendasi 0.85
             print("Tipenya: " + str(type(img)))
             detection = sv.Detections.from_yolov8(result)
             label = [
@@ -66,6 +66,7 @@ class ScanHelm:
                 else:
                     print("timer belum berjalan, menjalakan timer sekarang..")
                     timer_scan_thread.start()
+            # Else kondisi dimana helm tidak terdeteksi
             else:
                 state_store.global_serial_init.write(b'1')  # LED Merah Nyala
                 state_store.global_serial_init.write(b'4')  # LED Kuning Mati

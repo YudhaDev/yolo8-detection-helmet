@@ -3,7 +3,8 @@ import serial.tools.list_ports
 import time
 import state_store
 from scan_helm import ScanHelm
-
+import utils_waktu
+import backend
 
 class ScanRFID:
     def scan(self):
@@ -64,7 +65,11 @@ class ScanRFID:
                 rfid_number = str(state_store.global_serial_init.readline().decode('utf').rstrip('\n'))
             print(str(rfid_number))
             if len(rfid_number) > 3:
-                # state_store.global_serial_init.write(b'7')
+
+                # check kehadiran
+                uw = utils_waktu.UtilsWaktu()
+                uw.getSeninSabtu()
+
                 print("rfid terdeteksi.")
                 state_store.global_rfid_number = rfid_number
                 # time.sleep(0.1)

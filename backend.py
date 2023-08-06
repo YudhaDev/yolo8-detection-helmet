@@ -13,7 +13,8 @@ from flask import Flask, jsonify, send_from_directory, render_template, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from sqlalchemy.exc import SQLAlchemyError
-from datetime import datetime
+from datetime import datetime as dt
+import datetime
 
 ###############################
 
@@ -29,20 +30,28 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rfid.db'
 db = SQLAlchemy(app)
 app.app_context().push()
 
-
-# socketio.run(app)
-
+# Waktu indo
+waktu_indo = dt.utcnow() + datetime.timedelta(hours=7)
+format_waktu_indo = waktu_indo.strftime("%H:%M:%S %Y-%m-%d ")
+print(f'waktu indo sekarang: {format_waktu_indo}')
 
 class RFIDHelmetDetectionModelTable(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     rfid_number = db.Column(db.String(200), nullable=False)  # kolom untuk nomor rfid
     img_name = db.Column(db.String(200), nullable=False)  # kolom untuk path foto
     status = db.Column(db.String(50), nullable=False)
-    date_created = db.Column(db.DateTime, default=datetime.utcnow())  # kolom
+    date_created = db.Column(db.DateTime, default=format_waktu_indo)  # kolom
+    date_updated = db.Column(db.DateTime, nullable=True)
+
+class TableKehadiran(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    rfid_number = db.Column(db.String(200), nullable=False)  # kolom untuk nomor rfid
+    kehadiran_mingguan = db.Column(db.String(200), nullable=False)  # kolom untuk path foto
+    date_created = db.Column(db.DateTime, default=format_waktu_indo)  # kolom
     date_updated = db.Column(db.DateTime, nullable=True)
 
 
-# db.drop_all()
+db.drop_all()
 db.create_all()
 
 
@@ -175,3 +184,6 @@ def openImage():
     # task_get_photo = RFIDModelTable2.query.first()
     # img_decode = base64.b64decode(task_get_photo.photo)
     # return str(img_decode)
+
+def cekKehadiran():
+

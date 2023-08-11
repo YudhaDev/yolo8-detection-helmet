@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import logging
 import cv2
@@ -16,6 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime as dt
 import datetime
 
+import utils_waktu
 ###############################
 
 from scan_helm import ScanHelm
@@ -43,17 +45,15 @@ class RFIDHelmetDetectionModelTable(db.Model):
     date_created = db.Column(db.DateTime, default=format_waktu_indo)  # kolom
     date_updated = db.Column(db.DateTime, nullable=True)
 
-class TableKehadiran(db.Model):
+class TabelKehadiran(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     rfid_number = db.Column(db.String(200), nullable=False)  # kolom untuk nomor rfid
-    kehadiran_mingguan = db.Column(db.String(200), nullable=False)  # kolom untuk path foto
+    kehadiran_mingguan = db.Column(db.Integer, default=0)  # kolom untuk path foto
     date_created = db.Column(db.DateTime, default=format_waktu_indo)  # kolom
     date_updated = db.Column(db.DateTime, nullable=True)
 
-
-db.drop_all()
+# db.drop_all()
 db.create_all()
-
 
 def runBackend():
     app_backend = app.run(debug=True, use_reloader=False, port=5000,
@@ -185,5 +185,39 @@ def openImage():
     # img_decode = base64.b64decode(task_get_photo.photo)
     # return str(img_decode)
 
+@app.route('/cekTerdaftar/<string:rfid_number>', methods=['GET'])
+def cekTerdaftar(rfid_number):
+    # print(f'rfid_number di backend: {rfid_number}')
+    search_task = TabelKehadiran.query.filter_by(rfid_number= rfid_number).first()
+    # print(f'search_task_panjang_data: {search_task}')
+    if search_task == None:
+        return jsonify({}), 404
+    else:
+        return jsonify({
+            "id" : search_task.id,
+            "rfid_number" : search_task.rfid_number,
+            "kehadiran_mingguan" : search_task.kehadiran_mingguan,
+        })
+
+@app.route('/insertRFID/<string:rfid_number>', methods={'POST'})
+def insertRFIDBaru(rfid_number):
+    uw = utils_waktu.UtilsWaktu()
+    wi = uw.getWaktuIndo()
+    insert_task = TabelKehadiran(rfid_number=rfid_number, date_created=wi)
+    db.session.add(insert_task)
+    db.session.commit()
+    return jsonify({})
+
 def cekKehadiran():
+    uw = utils_waktu.UtilsWaktu()
+    # wi waktu indo
+    wi = uw.getWaktuIndo()
+    # print(f'tipe data wi: {wi.type()}')
+    senin, sabtu = uw.getSeninSabtu(wi)
+    selisi_hari_ke_senin = uw.getPerbedaanHari(wi, senin)
+
+    # check ke db menghitung jumlah kehadiran
+
+
+
 

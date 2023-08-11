@@ -12,7 +12,6 @@ import state_store
 
 
 class ScanHelm:
-
     def scan(self):
         state_store.global_timer = True
         timer_scan_thread = threading.Thread(target=self.timer_scan)
@@ -89,7 +88,6 @@ class ScanHelm:
                 else:
                     print("gagal akses store image API")
                     break
-
                 break
 
             # check jika terdeteksi Helm atau nggk

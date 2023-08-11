@@ -32,7 +32,11 @@ async def echo(websocket, path):
 async def startSensor(websocket, path):
     print("Ini dari scan_rfid.")
     scan_rfid_object = ScanRFID()
-    scan_rfid_object.scan()
+
+    # scan_rfid_object.scan()
+
+    # debug xndrive
+    scan_rfid_object.scan(debug=True)
 
 # async def websocket_fetch_data_console():
 #     # untuk fetch data

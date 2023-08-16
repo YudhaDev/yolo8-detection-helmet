@@ -30,34 +30,21 @@ async def echo(websocket, path):
 
 
 async def startSensor(websocket, path):
-    print("Ini dari scan_rfid.")
     scan_rfid_object = ScanRFID()
-
-    # scan_rfid_object.scan()
-
     # debug xndrive
-    scan_rfid_object.scan(debug=True)
+    scan_rfid_object.scan(debug=False)
 
-# async def websocket_fetch_data_console():
-#     # untuk fetch data
-#     start_server = websockets.serve(echo, "localhost", 5200)
-#
-#     # asyncio.get_event_loop().run_until_complete(start_server)
-#     # asyncio.get_event_loop().run_forever()
-
-
-# async def websocket_start_scan():
-#     # Untuk start scan RFID dan helm
-#     start_scan = await websockets.serve(startSensor, "localhost", 5201)
-#     # asyncio.get_event_loop().run_until_complete(start_scan)
-#     # asyncio.get_event_loop().run_forever()
-
+async def startSensorRegister(websocket, path):
+    scan_rfid_object = ScanRFID()
+    # debug xndrive
+    scan_rfid_object.scanRegister(debug=False)
 
 async def init_websockets():
     start_scan = await websockets.serve(startSensor, "localhost", 5201)
+    start_scan_register = await websockets.serve(startSensorRegister, "localhost", 5202)
     start_server = await websockets.serve(echo, "localhost", 5200)
 
-    await asyncio.gather(start_scan.wait_closed(), start_server.wait_closed())
+    await asyncio.gather(start_scan.wait_closed(), start_scan_register.wait_closed(), start_server.wait_closed())
 
 
 # Start websocket

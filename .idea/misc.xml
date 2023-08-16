@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="Black">
+    <option name="sdkUUID" value="ec75c22a-34df-407b-a4e1-2fc25cb4d41a" />
+  </component>
   <component name="ProjectRootManager" version="2" project-jdk-name="yolo8-detection" project-jdk-type="Python SDK" />
   <component name="PyCharmProfessionalAdvertiser">
     <option name="shown" value="true" />

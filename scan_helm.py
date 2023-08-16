@@ -55,6 +55,7 @@ class ScanHelm:
             img = box_annotator.annotate(scene=img, detections=detection, skip_label=False, labels=label)
             cv2.imshow("Kamera", img)
             #set img untuk streaming
+            state_store.global_stream_now = True
             state_store.global_gambar_per_frame = img
 
             # Check jika thread timernya uda jalan atau belom

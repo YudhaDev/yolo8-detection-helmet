@@ -24,7 +24,7 @@ from scan_helm import ScanHelm
 
 # Init back-end servernya
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins='*')
+state_store.global_socketio_object = SocketIO(app, cors_allowed_origins='*')
 CORS(app)
 # backend.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:@localhost/database_sensor2'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rfid.db'
@@ -61,11 +61,11 @@ def runBackend():
     # socketio = SocketIO(app_backend, sync_mode="eventlet")
 
     # Menjalankan backend beserta socketio
-    socketio.run(app, log_output=False)
+    state_store.global_socketio_object.run(app, log_output=False)
 
     # mendisable logging socketio di terminal
-    logging.getLogger('flask-socketio').setLevel(logging.ERROR)
-    logging.getLogger('engineio').setLevel(logging.ERROR)
+    # logging.getLogger('flask-socketio').setLevel(logging.ERROR)
+    # logging.getLogger('engineio').setLevel(logging.ERROR)
 
 
 def send_frame():
@@ -74,9 +74,13 @@ def send_frame():
         # success, img = cap.read()
         # state_store.global_gambar_per_frame = img
 
-        _, buffer = cv2.imencode('.jpg', state_store.global_gambar_per_frame)
-        jpg_as_text = base64.b64encode(buffer).decode('utf-8')
-        socketio.emit('frame', jpg_as_text)
+        if state_store.global_stream_now:
+            _, buffer = cv2.imencode('.jpg', state_store.global_gambar_per_frame)
+            jpg_as_text = base64.b64encode(buffer).decode('utf-8')
+            if not state_store.global_socketio_object == None:
+                state_store.global_socketio_object.emit('frame', jpg_as_text)
+            else :
+                print("Global socketio belum diinisialisasi")
         time.sleep(0.5)
 
 
@@ -206,6 +210,16 @@ def insertRFIDBaru(rfid_number):
     insert_task = TabelKehadiran(rfid_number=rfid_number, date_created=wi)
     db.session.add(insert_task)
     db.session.commit()
+    return jsonify({})
+
+@app.route('/insertRFID', methods={'POST'})
+def insertRFIDBaru2(rfid_number):
+    print("AHOYYYYYYYY")
+    # uw = utils_waktu.UtilsWaktu()
+    # wi = uw.getWaktuIndo()
+    # insert_task = TabelKehadiran(rfid_number=rfid_number, date_created=wi)
+    # db.session.add(insert_task)
+    # db.session.commit()
     return jsonify({})
 
 def cekKehadiran():

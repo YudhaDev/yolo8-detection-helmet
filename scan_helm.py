@@ -12,6 +12,8 @@ import state_store
 
 
 class ScanHelm:
+    def __init__(self, rfid_number_scan_masuk):
+        self.rfid_number_scan_masuk = rfid_number_scan_masuk
     def scan(self):
         state_store.global_timer = True
         timer_scan_thread = threading.Thread(target=self.timer_scan)
@@ -45,8 +47,8 @@ class ScanHelm:
         while True:
             # Init camera dan deteksi Yolo helmnya
             success, img = cap.read()
-            result = model(img, conf=0.85)[0] # ubah nilai conf= untuk meningkatkan akurasi mendeteksi helm, rekomendasi 0.85
-            print("Tipenya: " + str(type(img)))
+            result = model(img, conf=0.2)[0] # ubah nilai conf= untuk meningkatkan akurasi mendeteksi helm, rekomendasi 0.85
+            # print("Tipenya: " + str(type(img)))
             detection = sv.Detections.from_yolov8(result)
             label = [
                 f"{model.model.names[class_id]} {confidence: 0.2f}"
@@ -125,6 +127,11 @@ class ScanHelm:
                 else:
                     print("gagal akses store image API")
                     break
+
+                time.sleep(2)
+                state_store.global_serial_init.cancel_read()
+                state_store.global_serial_init.write(b'0')
+                state_store.global_serial_init.close()
 
             # Membiarkan jendela opencv tetap terbuka
             if cv2.waitKey(1) and 0xFF == ord('q'):

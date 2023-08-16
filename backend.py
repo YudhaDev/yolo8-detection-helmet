@@ -8,6 +8,7 @@ import state_store
 import base64
 from PIL import Image as PillowImage
 from flask_socketio import SocketIO, emit
+from flask import request
 
 # Untuk server lokalnya
 from flask import Flask, jsonify, send_from_directory, render_template, url_for
@@ -37,23 +38,29 @@ waktu_indo = dt.utcnow() + datetime.timedelta(hours=7)
 format_waktu_indo = waktu_indo.strftime("%H:%M:%S %Y-%m-%d ")
 print(f'waktu indo sekarang: {format_waktu_indo}')
 
+
 class RFIDHelmetDetectionModelTable(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     rfid_number = db.Column(db.String(200), nullable=False)  # kolom untuk nomor rfid
-    img_name = db.Column(db.String(200), nullable=False)  # kolom untuk path foto
+    img_name = db.Column(db.String(200), nullable=True)  # kolom untuk path foto
     status = db.Column(db.String(50), nullable=False)
-    date_created = db.Column(db.DateTime, default=format_waktu_indo)  # kolom
+    date_created = db.Column(db.DateTime, default=dt.utcnow() + datetime.timedelta(hours=7))  # waktu indo
     date_updated = db.Column(db.DateTime, nullable=True)
+
 
 class TabelKehadiran(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    nama = db.Column(db.String(200), nullable=False)
     rfid_number = db.Column(db.String(200), nullable=False)  # kolom untuk nomor rfid
+    seksi_bagian = db.Column(db.String(200), nullable=False)
     kehadiran_mingguan = db.Column(db.Integer, default=0)  # kolom untuk path foto
-    date_created = db.Column(db.DateTime, default=format_waktu_indo)  # kolom
+    date_created = db.Column(db.DateTime, default=dt.utcnow() + datetime.timedelta(hours=7)) # waktu indo
     date_updated = db.Column(db.DateTime, nullable=True)
+
 
 # db.drop_all()
 db.create_all()
+
 
 def runBackend():
     app_backend = app.run(debug=True, use_reloader=False, port=5000,
@@ -79,7 +86,7 @@ def send_frame():
             jpg_as_text = base64.b64encode(buffer).decode('utf-8')
             if not state_store.global_socketio_object == None:
                 state_store.global_socketio_object.emit('frame', jpg_as_text)
-            else :
+            else:
                 print("Global socketio belum diinisialisasi")
         time.sleep(0.5)
 
@@ -136,6 +143,25 @@ def getAll():
         })
     return jsonify(result)
 
+@app.route('/get-all-kehadiran')
+def getAllKehadiran():
+    getall_task = TabelKehadiran().query.order_by(TabelKehadiran.id).all()
+    result = []
+
+    for user in getall_task:
+        result.append({
+            'id': str(user.id),
+            'nama': str(user.nama),
+            'rfid_number': str(user.rfid_number),
+            'seksi_bagian': str(user.seksi_bagian),
+            'kehadiran_mingguan': str(user.kehadiran_mingguan),
+            'date_created': str(user.date_created),
+            'date_updated': str(user.date_updated)
+        })
+
+    # print(f"result: {str(result)}")
+    return jsonify(result)
+
 
 @app.route('/store-image', methods=['POST'])
 def storeImage():
@@ -189,19 +215,21 @@ def openImage():
     # img_decode = base64.b64decode(task_get_photo.photo)
     # return str(img_decode)
 
+
 @app.route('/cekTerdaftar/<string:rfid_number>', methods=['GET'])
 def cekTerdaftar(rfid_number):
     # print(f'rfid_number di backend: {rfid_number}')
-    search_task = TabelKehadiran.query.filter_by(rfid_number= rfid_number).first()
+    search_task = TabelKehadiran.query.filter_by(rfid_number=rfid_number).first()
     # print(f'search_task_panjang_data: {search_task}')
     if search_task == None:
         return jsonify({}), 404
     else:
         return jsonify({
-            "id" : search_task.id,
-            "rfid_number" : search_task.rfid_number,
-            "kehadiran_mingguan" : search_task.kehadiran_mingguan,
+            "id": search_task.id,
+            "rfid_number": search_task.rfid_number,
+            "kehadiran_mingguan": search_task.kehadiran_mingguan,
         })
+
 
 @app.route('/insertRFID/<string:rfid_number>', methods={'POST'})
 def insertRFIDBaru(rfid_number):
@@ -212,15 +240,52 @@ def insertRFIDBaru(rfid_number):
     db.session.commit()
     return jsonify({})
 
+
 @app.route('/insertRFID', methods={'POST'})
-def insertRFIDBaru2(rfid_number):
-    print("AHOYYYYYYYY")
-    # uw = utils_waktu.UtilsWaktu()
-    # wi = uw.getWaktuIndo()
-    # insert_task = TabelKehadiran(rfid_number=rfid_number, date_created=wi)
-    # db.session.add(insert_task)
-    # db.session.commit()
+def insertRFIDBaru2():
+    # Check sudah ada atau belum RFIDnya
+    # belum
+
+    # ini insertnya
+    data = request.get_json()
+    rfid_number = data['rfid_number'],
+    nama = data['nama'],
+    seksi_bagian = data['seksi_bagian']
+
+    #Bersihkan data sebelum masuk ke db
+    string_tobe_erased = "(),'"
+    rfid_number_cleaned = ''.join([char for char in rfid_number if char not in string_tobe_erased])
+    nama_cleaned = ''.join([char for char in nama if char not in string_tobe_erased])
+
+    print(f"{rfid_number, nama}")
+
+    uw = utils_waktu.UtilsWaktu()
+    wi = uw.getWaktuIndo()
+    try:
+        insert_task = TabelKehadiran(
+            rfid_number=str(rfid_number_cleaned),
+            nama=str(nama_cleaned),
+            seksi_bagian=seksi_bagian,
+            # date_created=wi
+        )
+        db.session.add(insert_task)
+        db.session.commit()
+    except SQLAlchemyError as err:
+        print(f"Error: {err}")
     return jsonify({})
+@app.route('/scan-pulang', methods={'POST'})
+def scanPulangBackend():
+    try:
+        task_pulang = RFIDHelmetDetectionModelTable(
+            rfid_number=state_store.global_rfid_number,
+            status="Scan Pulang",
+            date_created=dt.utcnow() + datetime.timedelta(hours=7)
+        )
+        db.session.add(task_pulang)
+        db.session.commit()
+    except SQLAlchemyError as err:
+        print("Terjadi kesalahan menyimpan data ke database." + str(err))
+    return "suskses simpan"
 
 def cekKehadiran():
     uw = utils_waktu.UtilsWaktu()
@@ -231,7 +296,3 @@ def cekKehadiran():
     selisi_hari_ke_senin = uw.getPerbedaanHari(wi, senin)
 
     # check ke db menghitung jumlah kehadiran
-
-
-
-

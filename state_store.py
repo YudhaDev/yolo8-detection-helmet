@@ -1,6 +1,8 @@
 import cv2
+import serial
 
-global_serial_init = ""
+global_rfid_mode_select = -1 # 0 = scan masuk, 1 = scan register, 2 = scan pulang
+global_serial_init : serial = None
 global_rfid_number = ""
 global_gambar_deteksi = ""
 

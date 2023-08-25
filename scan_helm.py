@@ -14,6 +14,7 @@ import state_store
 class ScanHelm:
     def __init__(self, rfid_number_scan_masuk):
         self.rfid_number_scan_masuk = rfid_number_scan_masuk
+
     def scan(self):
         state_store.global_timer = True
         timer_scan_thread = threading.Thread(target=self.timer_scan)
@@ -43,11 +44,12 @@ class ScanHelm:
             text_scale=1,
             thickness=2,
         )
+        state_store.global_stream_now = True
 
         while True:
             # Init camera dan deteksi Yolo helmnya
             success, img = cap.read()
-            result = model(img, conf=0.2)[0] # ubah nilai conf= untuk meningkatkan akurasi mendeteksi helm, rekomendasi 0.85
+            result = model(img, conf=0.2)[0]  # ubah nilai conf= untuk meningkatkan akurasi mendeteksi helm, rekomendasi 0.85
             # print("Tipenya: " + str(type(img)))
             detection = sv.Detections.from_yolov8(result)
             label = [
@@ -56,8 +58,7 @@ class ScanHelm:
             ]
             img = box_annotator.annotate(scene=img, detections=detection, skip_label=False, labels=label)
             cv2.imshow("Kamera", img)
-            #set img untuk streaming
-            state_store.global_stream_now = True
+            # set img untuk streaming
             state_store.global_gambar_per_frame = img
 
             # Check jika thread timernya uda jalan atau belom
@@ -70,27 +71,31 @@ class ScanHelm:
                     timer_scan_thread.start()
             # Else kondisi dimana helm tidak terdeteksi
             else:
+                state_store.global_socketio_object.emit("welkam", "helm tidak terdeteksi")
                 state_store.global_serial_init.write(b'1')  # LED Merah Nyala
                 state_store.global_serial_init.write(b'4')  # LED Kuning Mati
                 state_store.global_serial_init.write(b'7')  # Buzzer nyalah
-                state_store.global_status = "Helm tidak terdeteksi." # set status
+                state_store.global_status = "Helm tidak terdeteksi."  # set status
                 timer_scan_thread.join()  # Stop timernya
-                cv2.destroyAllWindows() # Hancurkan window opencv
+                cv2.destroyAllWindows()  # Hancurkan window opencv
 
                 # set variable global image
-                state_store.global_gambar_deteksi = img
-                # save ke database dgn mengakses API Flask
-                base_url = "http://127.0.0.1:5000/"
-                response = requests.post(base_url + "store-image")
-                if response.status_code == 200:
-                    print("suskses akses store image API")
-                    time.sleep(3)
-                    cv2.destroyAllWindows()
-                    # t3.join()
-                    break
-                else:
-                    print("gagal akses store image API")
-                    break
+                # state_store.global_gambar_deteksi = img
+                state_store.global_stream_now = False
+
+                # # save ke database dgn mengakses API Flask
+                # base_url = "http://127.0.0.1:5000/"
+                # combined_url = base_url + "store-image/" + self.rfid_number_scan_masuk
+                # response = requests.post(combined_url)
+                # if response.status_code == 200:
+                #     print("suskses akses store image API")
+                #     time.sleep(3)
+                #     cv2.destroyAllWindows()
+                #     # t3.join()
+                #     break
+                # else:
+                #     print("gagal akses store image API")
+                #     break
                 break
 
             # check jika terdeteksi Helm atau nggk
@@ -117,21 +122,26 @@ class ScanHelm:
 
                 # save ke database dgn mengakses API Flask
                 base_url = "http://127.0.0.1:5000/"
-                response = requests.post(base_url + "store-image")
+                combined_url = base_url + "store-image/" + self.rfid_number_scan_masuk
+                response = requests.post(combined_url)
                 if response.status_code == 200:
                     print("suskses akses store image API")
+                    state_store.global_socketio_object.emit("welkam", "helm terdeteksi")
                     time.sleep(3)
                     cv2.destroyAllWindows()
+                    state_store.global_stream_now = False
+
                     # t3.join()
                     break
                 else:
                     print("gagal akses store image API")
+                    state_store.global_stream_now = False
                     break
 
                 time.sleep(2)
-                state_store.global_serial_init.cancel_read()
+                # state_store.global_serial_init.cancel_read()
                 state_store.global_serial_init.write(b'0')
-                state_store.global_serial_init.close()
+                # state_store.global_serial_init.close()
 
             # Membiarkan jendela opencv tetap terbuka
             if cv2.waitKey(1) and 0xFF == ord('q'):

@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import time
@@ -54,7 +55,7 @@ class TabelKehadiran(db.Model):
     rfid_number = db.Column(db.String(200), nullable=False)  # kolom untuk nomor rfid
     seksi_bagian = db.Column(db.String(200), nullable=False)
     kehadiran_mingguan = db.Column(db.Integer, default=0)  # kolom untuk path foto
-    date_created = db.Column(db.DateTime, default=dt.utcnow() + datetime.timedelta(hours=7)) # waktu indo
+    date_created = db.Column(db.DateTime, default=dt.utcnow() + datetime.timedelta(hours=7))  # waktu indo
     date_updated = db.Column(db.DateTime, nullable=True)
 
 
@@ -71,6 +72,8 @@ def runBackend():
     state_store.global_socketio_object.run(app, log_output=False)
 
     # mendisable logging socketio di terminal
+    socketio_logger = logging.getLogger('socketio')
+    socketio_logger.setLevel(logging.ERROR)
     # logging.getLogger('flask-socketio').setLevel(logging.ERROR)
     # logging.getLogger('engineio').setLevel(logging.ERROR)
 
@@ -143,6 +146,7 @@ def getAll():
         })
     return jsonify(result)
 
+
 @app.route('/get-all-kehadiran')
 def getAllKehadiran():
     getall_task = TabelKehadiran().query.order_by(TabelKehadiran.id).all()
@@ -163,8 +167,8 @@ def getAllKehadiran():
     return jsonify(result)
 
 
-@app.route('/store-image', methods=['POST'])
-def storeImage():
+@app.route('/store-image/<string:rfid_number>', methods=['POST'])
+def storeImage(rfid_number):
     # ini inisialisasi path untuk menyimpan fotonya
     img_name = str(random.randint(1, 1000000000)) + ".jpg"
     save_dir1 = "static"
@@ -198,9 +202,11 @@ def storeImage():
 
     # Cara kedua, menyimpan fotonya kedalam project dan mendata pathnya-
     # kedalam database
+    cleaned_rfid_number = str(rfid_number).replace("!", "")
     try:
-        store_image_task = RFIDHelmetDetectionModelTable(rfid_number=state_store.global_rfid_number, img_name=img_name,
-                                                         status=state_store.global_status)
+        store_image_task = RFIDHelmetDetectionModelTable(rfid_number=cleaned_rfid_number, img_name=img_name,
+                                                         status=state_store.global_status,
+                                                         date_created=dt.utcnow() + datetime.timedelta(hours=7))
         db.session.add(store_image_task)
         db.session.commit()
     except SQLAlchemyError as err:
@@ -221,6 +227,7 @@ def cekTerdaftar(rfid_number):
     # print(f'rfid_number di backend: {rfid_number}')
     search_task = TabelKehadiran.query.filter_by(rfid_number=rfid_number).first()
     # print(f'search_task_panjang_data: {search_task}')
+    # print(f"search_task: {str(search_task)}")
     if search_task == None:
         return jsonify({}), 404
     else:
@@ -252,7 +259,7 @@ def insertRFIDBaru2():
     nama = data['nama'],
     seksi_bagian = data['seksi_bagian']
 
-    #Bersihkan data sebelum masuk ke db
+    # Bersihkan data sebelum masuk ke db
     string_tobe_erased = "(),'"
     rfid_number_cleaned = ''.join([char for char in rfid_number if char not in string_tobe_erased])
     nama_cleaned = ''.join([char for char in nama if char not in string_tobe_erased])
@@ -273,9 +280,12 @@ def insertRFIDBaru2():
     except SQLAlchemyError as err:
         print(f"Error: {err}")
     return jsonify({})
+
+
 @app.route('/scan-pulang', methods={'POST'})
 def scanPulangBackend():
     try:
+        # pertama simpan dulu scan pulang ke DB
         task_pulang = RFIDHelmetDetectionModelTable(
             rfid_number=state_store.global_rfid_number,
             status="Scan Pulang",
@@ -283,16 +293,133 @@ def scanPulangBackend():
         )
         db.session.add(task_pulang)
         db.session.commit()
+
+        # setelah itu get data scan dari rfid ini untuk minggu ini
+        result = getLogScan(state_store.global_rfid_number)
+
+        # membandingkan waktu scan masuk dan pulang untuk tiap2 hari
+        waktu_masuk: datetime.datetime = None
+        waktu_pulang: datetime.datetime = None
+        akumulasi_jam = 0
+        for item in result:
+            # print(str(item))
+            if item["img_name"]:  # kalo scan masuk
+                waktu_masuk = item["date_created"]
+            else:  # berarti scan ulang
+                waktu_pulang = item["date_created"]
+
+            if (waktu_masuk != None and waktu_pulang != None):
+                uw = utils_waktu.UtilsWaktu()
+                format_string = "%Y-%m-%d %H:%M:%S"
+                jam = uw.selisihWaktuJam(waktu_pulang, waktu_masuk)
+                akumulasi_jam = akumulasi_jam + jam
+                waktu_masuk = None
+                waktu_pulang = None
+                # print(f"akumulasi_jam: {akumulasi_jam}")
+
+        # update kehadiran ke tabel kehadiran
+        updateKehadiran(akumulasi_kehadiran=akumulasi_jam, rfid_number=state_store.global_rfid_number)
+
     except SQLAlchemyError as err:
         print("Terjadi kesalahan menyimpan data ke database." + str(err))
     return "suskses simpan"
 
-def cekKehadiran():
-    uw = utils_waktu.UtilsWaktu()
-    # wi waktu indo
-    wi = uw.getWaktuIndo()
-    # print(f'tipe data wi: {wi.type()}')
-    senin, sabtu = uw.getSeninSabtu(wi)
-    selisi_hari_ke_senin = uw.getPerbedaanHari(wi, senin)
 
-    # check ke db menghitung jumlah kehadiran
+def getLogScan(rfid_number):
+    # first, tentuin tanggal senin dan sabtu untuk minggu ini
+    uw = utils_waktu.UtilsWaktu()
+    wi = uw.getWaktuIndo()
+    senin, sabtu = uw.getSeninSabtu(wi)
+
+    # kemudian get semua
+    get_task = RFIDHelmetDetectionModelTable.query.filter(
+        RFIDHelmetDetectionModelTable.rfid_number == rfid_number,
+        RFIDHelmetDetectionModelTable.date_created >= senin,
+        RFIDHelmetDetectionModelTable.date_created <= sabtu
+    ).all()
+    result = [{'id': row.id, 'rfid_number': row.rfid_number, 'img_name': row.img_name, 'status': row.status,
+               'date_created': row.date_created, 'date_updated': row.date_updated} for row in get_task]
+    return result
+
+
+def updateKehadiran(rfid_number, akumulasi_kehadiran):
+    update_task = TabelKehadiran.query.filter_by(rfid_number=rfid_number).first()
+    print(str(update_task))
+    try:
+        if update_task:
+            update_task.kehadiran_mingguan = int(round(float(akumulasi_kehadiran)))
+            db.session.commit()
+            print("sukses update kehadiran")
+    except SQLAlchemyError as err:
+        print(f"gagal update kehadiran: {err}")
+
+
+@app.route('/cek-kehadiran/<string:rfid_number>', methods={'GET'})
+def cekKehadiran(rfid_number):
+    cek_task = TabelKehadiran.query.filter_by(rfid_number=rfid_number).first()
+
+    if cek_task:
+        if cek_task.kehadiran_mingguan >= 56:
+            state_store.global_socketio_object.emit("kehadiran-limit", True)
+            print(f"kehadiran sudah lebih dari 56")
+            return jsonify({}), 404
+        else:
+            print(f"kehadiran_sekarang: {cek_task.kehadiran_mingguan}")
+            state_store.global_socketio_object.emit("kehadiran-value", cek_task.kehadiran_mingguan)
+            time.sleep(3)
+            return jsonify({}), 200
+    else:
+        return jsonify({}), 800
+
+@app.route('/check-sudah-scan/<string:rfid_number>/<string:mode>', methods={'GET'})
+def cekSudahScan(rfid_number, mode):
+    uw = utils_waktu.UtilsWaktu()
+    wi = uw.getWaktuIndo()
+    if mode == "scan masuk":
+        print("masuk mode cek scan masuk")
+
+        waktu_sekarang_awal = wi.replace(hour=0, minute=0, second=1)
+        waktu_sekarang_akhir = wi.replace(hour=23, minute=59, second=59)
+        print(f"debug: {waktu_sekarang_awal}")
+        print(f"debug: {waktu_sekarang_akhir}")
+        print(f"debug: {rfid_number}")
+        get_task = RFIDHelmetDetectionModelTable.query.filter(
+            RFIDHelmetDetectionModelTable.rfid_number == rfid_number,
+            RFIDHelmetDetectionModelTable.status == "Helm terdeteksi.",
+            RFIDHelmetDetectionModelTable.date_created >= waktu_sekarang_awal,
+            RFIDHelmetDetectionModelTable.date_created <= waktu_sekarang_akhir
+        ).all()
+
+        data = [{'id': row.id, 'rfid_number': row.rfid_number, 'date_created':row.date_created}for row in get_task]
+        print(f"sadawda: {str(data)}")
+
+        if len(get_task)>0:
+            state_store.global_socketio_object.emit("scan-masuk-sudah", "true")
+            print("sudah scan masuk hari ini.")
+            return "true"
+        else:
+            return "false"
+
+
+    elif mode == "scan pulang":
+        waktu_sekarang_awal = wi.replace(hour=0, minute=0, second=1)
+        waktu_sekarang_akhir = wi.replace(hour=23, minute=59, second=59)
+        # print(f"waktu sekarang: {waktu_sekarang_awal}")
+        get_task = RFIDHelmetDetectionModelTable.query.filter(
+            RFIDHelmetDetectionModelTable.rfid_number == rfid_number,
+            RFIDHelmetDetectionModelTable.status == "Scan Pulang",
+            RFIDHelmetDetectionModelTable.date_created >= waktu_sekarang_awal,
+            RFIDHelmetDetectionModelTable.date_created <= waktu_sekarang_akhir
+        ).all()
+
+        # data = [{'id': row.id, 'rfid_number': row.rfid_number, 'date_created':row.date_created}for row in get_task]
+        # print(f"sadawda: {str(data)}")
+
+        if len(get_task)>0:
+            state_store.global_socketio_object.emit("scan-pulang-sudah", "true")
+            print("sudah scan pulang hari ini.")
+            return "true"
+        else:
+            return "false"
+    else:
+        print("Jangan lupa masukan mode")
